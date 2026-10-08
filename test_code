@@ -1,1 +1,29 @@
+sudo apt update
+sudo apt install -y git build-essential meson ninja-build pkg-config cmake \
+    libfmt-dev liburing-dev libgtest-dev libgmock-dev libssl-dev zlib1g-dev
+
+mkdir -p ~/src && cd ~/src
+
+# pciutils (shared lib)
+git clone https://github.com/pciutils/pciutils && cd pciutils
+make SHARED=yes && sudo make SHARED=yes install install-lib && cd ..
+
+# stdplus
+git clone https://github.com/openbmc/stdplus && cd stdplus
+meson setup builddir -Dexamples=false -Dtests=disabled
+ninja -C builddir && sudo ninja -C builddir install && cd ..
+
+# ipmi-blob-tool
+git clone https://github.com/openbmc/ipmi-blob-tool && cd ipmi-blob-tool
+meson setup builddir -Dtests=disabled
+ninja -C builddir && sudo ninja -C builddir install && cd ..
+
+# phosphor-ipmi-flash host-tool only
+git clone https://github.com/openbmc/phosphor-ipmi-flash && cd phosphor-ipmi-flash
+meson setup builddir -Dbmc-blob-handler=disabled -Dhost-tool=enabled -Dtests=disabled
+ninja -C builddir && sudo ninja -C builddir install
+
+sudo ldconfig
+which burn_my_bmc
+
 #add code here
