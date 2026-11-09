@@ -1,0 +1,109 @@
+From 60981c5e19b1be7a353ec365787b214048c3213e Mon Sep 17 00:00:00 2001
+From: soorajmaurya0 <sooraj20636@gmail.com>
+Date: Fri, 6 Nov 2026 19:44:00 +0000
+Subject: [PATCH] Firmware: show update result from the Redfish task
+
+The firmware update form only reports the outcome through a fixed
+6 minute "Verify update" toast, even when the update finishes in
+seconds.
+
+The UpdateService POST returns a Redfish Task. Poll its TaskState
+every 5 seconds and, as soon as it is:
+- Completed: show "Firmware update successful."
+- Exception: show "Firmware update failed."
+then end the loader and cancel the 6 minute timer.
+
+Any other outcome (bmcweb sets Cancelled when the task times out
+after 5 minutes without progress) falls back to the existing
+6 minute "Verify update" toast, which also stops the polling.
+
+Tested:
+- Jest with a mocked task endpoint: Completed and Exception toast
+  on the next poll, 6 minute toast cancelled, polling stops; a
+  never-terminal or Cancelled task still gets the 6 minute toast;
+  a Completed reply arriving after that toast is ignored; upload
+  errors behave as before.
+- npm run lint: no new warnings, no autofix diff.
+- npm run build succeeds.
+---
+ src/locales/en-US.json                        |  2 ++
+ src/store/modules/Operations/FirmwareStore.js |  6 +++++
+ .../Firmware/FirmwareFormUpdate.vue           | 27 +++++++++++++++++++
+ 3 files changed, 35 insertions(+)
+
+diff --git a/src/locales/en-US.json b/src/locales/en-US.json
+index e64287d..e5d6706 100644
+--- a/src/locales/en-US.json
++++ b/src/locales/en-US.json
+@@ -366,8 +366,10 @@
+             "errorUpdateFirmware": "Error starting firmware update.",
+             "rebootStarted": "Reboot started",
+             "rebootStartedMessage": "Successfully started reboot from backup image.",
++            "updateFailed": "Firmware update failed.",
+             "updateStarted": "Update started",
+             "updateStartedMessage": "Wait for the firmware update notification before making any changes.",
++            "updateSuccessful": "Firmware update successful.",
+             "verifySwitch": "Verify switch",
+             "verifySwitchMessage": "Refresh the application to verify the running and backup images switched.",
+             "verifyUpdate": "Verify update",
+diff --git a/src/store/modules/Operations/FirmwareStore.js b/src/store/modules/Operations/FirmwareStore.js
+index 411b0bd..bb36573 100644
+--- a/src/store/modules/Operations/FirmwareStore.js
++++ b/src/store/modules/Operations/FirmwareStore.js
+@@ -162,6 +162,12 @@ const FirmwareStore = {
+           );
+         });
+     },
++    async getTaskState(_, taskUri) {
++      return await api
++        .get(taskUri)
++        .then(({ data }) => data.TaskState)
++        .catch((error) => console.log(error));
++    },
+     async switchBmcFirmwareAndReboot({ getters }) {
+       const backupLocation = getters.backupBmcFirmware.location;
+       const data = {
+diff --git a/src/views/Operations/Firmware/FirmwareFormUpdate.vue b/src/views/Operations/Firmware/FirmwareFormUpdate.vue
+index 4346747..db4a10f 100644
+--- a/src/views/Operations/Firmware/FirmwareFormUpdate.vue
++++ b/src/views/Operations/Firmware/FirmwareFormUpdate.vue
+@@ -113,12 +113,39 @@ export default {
+         .dispatch('firmware/uploadFirmware', {
+           image: this.file,
+         })
++        .then((response) => {
++          const taskUri = response?.data?.['@odata.id'];
++          if (taskUri) this.pollUpdateTask(taskUri, timerId);
++        })
+         .catch(({ message }) => {
+           this.endLoader();
+           this.errorToast(message);
+           clearTimeout(timerId);
+         });
+     },
++    pollUpdateTask(taskUri, timerId) {
++      setTimeout(async () => {
++        const taskState = await this.$store.dispatch(
++          'firmware/getTaskState',
++          taskUri,
++        );
++        // Stop if the 6 minute verify update timer already ended the update
++        if (!this.loading) return;
++        if (taskState === 'Completed') {
++          clearTimeout(timerId);
++          this.endLoader();
++          this.successToast(
++            i18n.global.t('pageFirmware.toast.updateSuccessful'),
++          );
++        } else if (taskState === 'Exception') {
++          clearTimeout(timerId);
++          this.endLoader();
++          this.errorToast(i18n.global.t('pageFirmware.toast.updateFailed'));
++        } else {
++          this.pollUpdateTask(taskUri, timerId);
++        }
++      }, 5000);
++    },
+     onSubmitUpload() {
+       this.v$.$touch();
+       if (this.v$.$invalid) return;
