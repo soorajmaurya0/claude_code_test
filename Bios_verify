@@ -39,3 +39,8 @@ fs::path publicKeyFile(imageDirPath / PUBLICKEY_FILE_NAME);
 +            return true;
 +        }
 +
+error("Signature verification failed for {VERSIONID}; aborting",
++                  "VERSIONID", versionId);
++            return softwareServer::Activation::activation(
++                softwareServer::Activation::Activations::Failed);
+         
