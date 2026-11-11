@@ -1,0 +1,41 @@
+fs::path publicKeyFile(imageDirPath / PUBLICKEY_FILE_NAME);
+ 
++        if (purpose == VersionPurpose::Host)
++        {
++            // gen-bios-tar keeps the BIOS image under any file name, so
++            // verify every file except MANIFEST, publickey and the *.sig
++            // files. MANIFEST and publickey were verified above.
++            bool hostFilesFound = false;
++            for (const auto& entry : fs::directory_iterator(imageDirPath))
++            {
++                const auto& file = entry.path();
++                if (file.filename() == MANIFEST_FILE_NAME ||
++                    file.filename() == PUBLICKEY_FILE_NAME ||
++                    file.extension() == SIGNATURE_FILE_EXT)
++                {
++                    continue;
++                }
++
++                fs::path sigFile(file);
++                sigFile += SIGNATURE_FILE_EXT;
++
++                if (!entry.is_regular_file() ||
++                    !verifyFile(file, sigFile, publicKeyFile, hashType))
++                {
++                    error("Image file Signature Validation failed on {PATH}",
++                          "PATH", file);
++                    return false;
++                }
++                hostFilesFound = true;
++            }
++
++            if (!hostFilesFound)
++            {
++                error("Unable to find files to verify");
++                return false;
++            }
++
++            debug("Successfully completed Signature validation.");
++            return true;
++        }
++
