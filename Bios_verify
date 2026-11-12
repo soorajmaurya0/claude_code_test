@@ -44,3 +44,12 @@ error("Signature verification failed for {VERSIONID}; aborting",
 +            return softwareServer::Activation::activation(
 +                softwareServer::Activation::Activations::Failed);
          
+
+
+else
+    outfile="${outfile%.tar.gz}"
+    outfile="${outfile%-bios}-bios.tar.gz"
+    if [[ $outfile != /* ]]; then
+        outfile=$(pwd)/$outfile
+    fi
+fi
