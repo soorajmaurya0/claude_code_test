@@ -1,3 +1,5 @@
+https://lists.ozlabs.org/pipermail/linux-aspeed/2025-November/016983.html
+
 fs::path publicKeyFile(imageDirPath / PUBLICKEY_FILE_NAME);
  
 +        if (purpose == VersionPurpose::Host)
